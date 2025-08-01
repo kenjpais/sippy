@@ -84,6 +84,7 @@ WITH RecentSuccessfulJobs AS (
           OR prowjob_job_name LIKE 'periodic-ci-redhat-chaos-prow-scripts-main-cr-%%'
           OR prowjob_job_name LIKE 'release-%%'
           OR prowjob_job_name LIKE 'aggregator-%%'
+          OR prowjob_job_name LIKE 'periodic-ci-%%-lp-interop-%%'
           OR prowjob_job_name LIKE 'pull-ci-openshift-%%')
   GROUP BY prowjob_job_name
 )
@@ -102,6 +103,7 @@ WHERE j.prowjob_start > DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 180 DAY) AND
         OR j.prowjob_job_name LIKE 'periodic-ci-shiftstack-%%'
         OR j.prowjob_job_name LIKE 'periodic-ci-redhat-chaos-prow-scripts-main-cr-%%'
         OR j.prowjob_job_name LIKE 'release-%%'
+        OR j.prowjob_job_name LIKE 'periodic-ci-%%-lp-interop-%%'
         OR j.prowjob_job_name LIKE 'aggregator-%%')
       OR j.prowjob_job_name LIKE 'pull-ci-openshift-%%')
 GROUP BY j.prowjob_job_name, r.prowjob_url, r.successful_start
@@ -421,6 +423,7 @@ func setOwner(_ logrus.FieldLogger, variants map[string]string, jobName string) 
 		{"-openshift-tests-private", "qe"},
 		{"-openshift-verification-tests", "qe"},
 		{"-openshift-distributed-tracing", "qe"},
+		{"-lp-interop", "mpiit"}, // MPEX Integrity and Interop Team
 	}
 
 	for _, entry := range ownerPatterns {
@@ -443,7 +446,6 @@ func setSuite(_ logrus.FieldLogger, variants map[string]string, jobName string) 
 		{"-serial", "serial"},
 		{"-etcd-scaling", "etcd-scaling"},
 		{"conformance", "parallel"}, // Jobs with "conformance" but no explicit serial are probably parallel
-		{"usernamespace", "usernamespace"},
 		{"-e2e-external-", "parallel"},
 	}
 
@@ -695,19 +697,29 @@ func (v *OCPVariantLoader) setJobTier(_ logrus.FieldLogger, variants map[string]
 func setProcedure(_ logrus.FieldLogger, variants map[string]string, jobName string) {
 	jobNameLower := strings.ToLower(jobName)
 
+	// with multi value support we need a build up the value
+	base := ""
+	procedureValue := VariantNoValue
+
+	if strings.Contains(jobNameLower, "-serial") {
+		base = concatProcedureValues(base, "serial")
+		procedureValue = base
+	}
 	// Job procedure patterns
 	procedurePatterns := []struct {
 		substring string
 		procedure string
 	}{
-		{"-etcd-scaling", "etcd-scaling"},
-		{"-cpu-partitioning", "cpu-partitioning"},
-		{"-automated-release", "automated-release"},
-		{"-cert-rotation-shutdown-", "cert-rotation-shutdown"},
-		{"-console-operator-", "console-operator"},
-		{"-ipsec", "ipsec"},
-		{"-ocl", "on-cluster-layering"},
-		{"-machine-config-operator", "machine-config-operator"},
+		{"-etcd-scaling", concatProcedureValues(base, "etcd-scaling")},
+		{"-cpu-partitioning", concatProcedureValues(base, "cpu-partitioning")},
+		{"-automated-release", concatProcedureValues(base, "automated-release")},
+		{"-cert-rotation-shutdown-", concatProcedureValues(base, "cert-rotation-shutdown")},
+		{"-console-operator-", concatProcedureValues(base, "console-operator")},
+		{"-ipsec", concatProcedureValues(base, "ipsec")},
+		{"-network-flow-matrix", concatProcedureValues(base, "network-flow-matrix")},
+		{"-ocl", concatProcedureValues(base, "on-cluster-layering")},
+		{"-machine-config-operator", concatProcedureValues(base, "machine-config-operator")},
+		{"-usernamespace", concatProcedureValues(base, "usernamespace")},
 	}
 
 	for _, entry := range procedurePatterns {
@@ -718,7 +730,19 @@ func setProcedure(_ logrus.FieldLogger, variants map[string]string, jobName stri
 	}
 
 	// Default procedure
-	variants[VariantProcedure] = VariantNoValue
+	variants[VariantProcedure] = procedureValue
+}
+
+func concatProcedureValues(base, addition string) string {
+	if len(base) == 0 {
+		return addition
+	}
+	// shouldn't get called this way
+	if len(addition) == 0 {
+		return base
+	}
+
+	return fmt.Sprintf("%s-%s", base, addition)
 }
 
 func setTopology(_ logrus.FieldLogger, variants map[string]string, jobName string) {
@@ -883,11 +907,18 @@ func setArchitecture(_ logrus.FieldLogger, variants map[string]string, jobName s
 		{"-s390x", "s390x"},
 		{"-multi-z-z", "s390x"},
 		{"-heterogeneous", "heterogeneous"},
-		{"-multi-", "heterogeneous"},
+		{"-multi", "heterogeneous"},
 	}
 
 	// the use of multi in these cases do not apply to architecture so drop them out from evaluation
-	ignorePatterns := []string{"-multi-vcenter-", "-multi-network-"}
+	ignorePatterns := []string{
+		"-multi-vcenter-",
+		"-multi-network-",
+		"-multisubnets-",
+		"-multitenant",
+		"-multiarch",
+		"-multinet",
+	}
 	for _, ignore := range ignorePatterns {
 		jobNameLower = strings.ReplaceAll(jobNameLower, ignore, "-")
 	}
