@@ -13,12 +13,14 @@ func (ocp *OCPRelease) GetAlias() string {
 	return "ocp"
 }
 
-func (ocp *OCPRelease) GetStreams() []string {
-	return []string{"nightly", "ci"}
-}
-
 func (ocp *OCPRelease) BuildReleaseStreams(releases []string) []string {
-	return buildReleaseStreams(releases, ocp.GetStreams())
+	releaseStreams := make([]string, 0, len(releases)*2)
+	for _, release := range releases {
+		for _, stream := range []string{"nightly", "ci"} {
+			releaseStreams = append(releaseStreams, fmt.Sprintf("%s.0-0.%s", release, stream))
+		}
+	}
+	return releaseStreams
 }
 
 func (ocp *OCPRelease) BuildTagsURL(release, architecture string) string {
@@ -37,12 +39,14 @@ func (okd *OKDRelease) GetAlias() string {
 	return "origin"
 }
 
-func (okd *OKDRelease) GetStreams() []string {
-	return []string{"okd-scos"}
-}
-
 func (okd *OKDRelease) BuildReleaseStreams(releases []string) []string {
-	return buildReleaseStreams(releases, okd.GetStreams())
+	releaseStreams := []string{}
+	for _, release := range releases {
+		for _, stream := range []string{"okd-scos"} {
+			releaseStreams = append(releaseStreams, strings.Replace(release, "-okd", ".0-0.", 1)+stream)
+		}
+	}
+	return releaseStreams
 }
 
 func (okd *OKDRelease) BuildTagsURL(release, architecture string) string {
@@ -51,16 +55,6 @@ func (okd *OKDRelease) BuildTagsURL(release, architecture string) string {
 
 func (okd *OKDRelease) BuildDetailsURL(release, architecture, tag string) string {
 	return buildDetailsURL(architecture, okd.GetAlias(), buildReleaseName(release, architecture), tag)
-}
-
-func buildReleaseStreams(releases []string, streams []string) []string {
-	releaseStreams := make([]string, 0, len(releases)*len(streams))
-	for _, release := range releases {
-		for _, stream := range streams {
-			releaseStreams = append(releaseStreams, fmt.Sprintf("%s.0-0.%s", release, stream))
-		}
-	}
-	return releaseStreams
 }
 
 func buildReleaseName(release, architecture string) string {

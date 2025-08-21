@@ -98,9 +98,6 @@ type PlatformRelease interface {
 	GetName() string
 	GetAlias() string
 
-	// GetStreams returns the available release streams for this platform
-	GetStreams() []string
-
 	// BuildReleaseStreams builds the full stream names for given releases
 	BuildReleaseStreams(releases []string) []string
 
